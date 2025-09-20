@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chat Socket.IO UNA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px/1.4 Helvetica, Arial, sans-serif; background:#fafafa; color:#111; }
+      #messages { list-style: none; margin: 0; padding: 0 0 72px; }
+      #messages li { padding: 10px 12px; border-bottom: 1px solid #eee; background:#fff; }
+      #messages li:nth-child(odd) { background: #f7f7f7; }
+      #messages img, #messages video, #messages iframe { display:block; margin-top:6px; max-width: 100%; border-radius: 6px; }
+      #messages iframe { width: 100%; aspect-ratio: 16/9; }
+
+      form {
+        position: fixed; left: 0; right: 0; bottom: 0;
+        display: flex; gap: 8px; align-items: center;
+        padding: 8px; background: #000;
+      }
+      form input, form button {
+        font: inherit; border: none; border-radius: 6px;
+      }
+      #nombre { width: 22%; min-width: 140px; padding: 10px; }
+      #m      { flex: 1; padding: 10px; }
+      button  { padding: 10px 14px; background: rgb(130,224,255); cursor: pointer; }
+      @media (max-width: 480px) {
+        #nombre { width: 34%; }
+      }
+    </style>
+  </head>
+  <body>
+    <ul id="messages"></ul>
+
+    <form id="form">
+      <input id="nombre" autocomplete="off" placeholder="Username" />
+      <input id="m" autocomplete="off" placeholder="Escribe un mensaje o URL (img/video)" />
+      <button type="submit">Enviar</button>
+    </form>
+
+    <!-- Socket.IO (mismo mayor que en server) -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.js"></script>
+    <script>
+      // Color aleatorio para el usuario
+      var colorHexTxt = "";
+      function getRandomColor() {
+        var letters = "0123456789ABCDEF", color = "#";
+        for (var i = 0; i < 6; i++) color += letters[Math.floor(Math.random() * 16)];
+        return color;
+      }
+
+      (function () {
+        var socket = io(); // se conecta al mismo host:puerto
+
+        // Enviar mensaje al servidor
+        document.getElementById("form").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var nombreTxt  = document.getElementById("nombre").value || "Anónimo";
+          var mensajeTxt = document.getElementById("m").value;
+
+          if (!mensajeTxt) return;
+
+          if (!colorHexTxt) colorHexTxt = getRandomColor();
+
+          var jsonMsg = { nombre: nombreTxt, mensaje: mensajeTxt, color: colorHexTxt };
+          socket.emit("Evento-Mensaje-Server", JSON.stringify(jsonMsg));
+          document.getElementById("m").value = "";
+        });
+
+        // Render seguro sin innerHTML
+        function renderMensaje(payload) {
+          // payload = { nombre(escaped), color, mensaje: { kind, ... } }
+          var li = document.createElement("li");
+
+          var strong = document.createElement("b");
+          strong.style.color = payload.color;
+          strong.textContent = payload.nombre;
+
+          li.appendChild(strong);
+          li.appendChild(document.createTextNode(": "));
+
+          var m = payload.mensaje;
+
+          if (m && m.kind === "image") {
+            var img = document.createElement("img");
+            img.src = m.url;
+            img.alt = "imagen";
+            img.loading = "lazy";
+            img.referrerPolicy = "no-referrer";
+            img.style.maxWidth = "360px";
+            img.style.maxHeight = "240px";
+            li.appendChild(img);
+
+          } else if (m && m.kind === "video") {
+            if (m.provider === "youtube") {
+              var iframe = document.createElement("iframe");
+              iframe.src = m.url; // ya viene como /embed/ID
+              iframe.title = "YouTube video";
+              iframe.frameBorder = "0";
+              iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+              iframe.referrerPolicy = "no-referrer";
+              iframe.allowFullscreen = true;
+              li.appendChild(iframe);
+            } else {
+              var video = document.createElement("video");
+              video.src = m.url; // .mp4 / .webm / .ogg
+              video.controls = true;
+              video.preload = "metadata";
+              video.style.maxWidth = "360px";
+              video.style.maxHeight = "240px";
+              li.appendChild(video);
+            }
+
+          } else {
+            var span = document.createElement("span");
+            span.textContent = (m && m.text) ? m.text : "";
+            li.appendChild(span);
+          }
+
+          document.getElementById("messages").appendChild(li);
+          window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        // Escuchar eventos desde el servidor
+        socket.on("Evento-Mensaje-Server", function (msg) {
+          try {
+            var payload = JSON.parse(msg);
+            renderMensaje(payload);
+          } catch (e) {
+            // Si el server enviara un objeto ya parseado
+            if (msg && typeof msg === "object" && msg.mensaje) renderMensaje(msg);
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
